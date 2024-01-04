@@ -4,7 +4,7 @@ import time
 import os
 from pprint import pprint
 
-url = "http://2c7ea9ad.r8.cpolar.top"
+url = "http://242c7f38.r18.cpolar.top"
 # url = "	http://127.0.0.1:10532"
 name = input('>>> ')
 print(name)

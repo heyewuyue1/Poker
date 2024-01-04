@@ -183,7 +183,7 @@ def find_best_hand(player_hand, public_cards):
     return best_hand
 
 def compare_hands_for_players(hands):
-    global last_result, last_winners
+    global last_result, last_winners, players
     winner = []
     for k in hands:
         if winner == []:
@@ -194,9 +194,10 @@ def compare_hands_for_players(hands):
                 winner.append(k)
             elif compare_hands(hands[k], hands[winner[0]]) == 0:
                 winner.append(k)
+    last_result = {}
     for k in hands:
         last_result[k] = [translate(card) for card in sorted(list(hands[k]), key=lambda x: x[1].value, reverse=True)]
-    last_winners = winner
+    last_winners = [players[k].name for k in winner]
     return winner
 
 seed = int(time.time())
@@ -340,7 +341,10 @@ def reg_act(move: Move):
             players[move.seat].check()
             print(f'Player {move.seat} check')
         else: 
-            players[move.seat].bet(last_bet - players[move.seat].bet_street)
+            if players[move.seat].stack < last_bet - players[move.seat].bet_street:
+                players[move.seat].bet(player[move.seat].stack)
+            else:
+                players[move.seat].bet(last_bet - players[move.seat].bet_street)
             print(f'Player {move.seat} call {players[move.seat].bet_street}')
     elif move.move.startswith('f'):
         players[move.seat].fold()
