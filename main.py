@@ -9,11 +9,6 @@ from pydantic import BaseModel
 from collections import Counter
 from itertools import combinations
 
-# TODO:
-# 看后手
-# 每条街结束停顿5秒
-# id换成名字,数字换成ATJQK
-
 pot = 0
 last_bet = 0
 last_result = {}
@@ -199,7 +194,8 @@ def compare_hands_for_players(hands):
                 winner.append(k)
             elif compare_hands(hands[k], hands[winner[0]]) == 0:
                 winner.append(k)
-    last_result = hands
+    for k in hands:
+        last_result[k] = [translate(card) for card in sorted(list(hands[k]), key=lambda x: x[1].value, reverse=True)]
     last_winners = winner
     return winner
 
@@ -210,6 +206,8 @@ points = (Point.Ace, Point.Two, Point.Three,Point.Four,Point.Five,Point.Six,Poin
 public = []
 players = [None, None, None, None, None, None]
 action = []
+last_street = []
+last_public = []
 table_stat = TableStat.END
 btn = 0
 seats = [0, 0, 0, 0, 0, 0]
@@ -230,8 +228,9 @@ def showdown():
 
 def clear():
     global public, pot, action, btn
-    public.clear()
-    action.clear()
+    public = []
+    action = []
+    last_street.clear()
     btn = next_player(btn)
     for player in players:
         if player is not None:
@@ -244,7 +243,7 @@ def clear():
     dealer.shuffle()
 
 def step():
-    global table_stat, cur_player, action, last_bet
+    global table_stat, cur_player, action, last_bet, last_street, last_public
     sb = next_player(btn)
     bb = next_player(sb)
     if table_stat == TableStat.END:
@@ -256,12 +255,15 @@ def step():
                 player.hand.append(dealer.deal())
                 player.hand.append(dealer.deal())
                 player.status = PlayerStat.WAITING
-        action.append(f'{players[sb].name}[{sb}] ' + 'b 10')
-        action.append(f'{players[bb].name}[{bb}] ' + 'b 20')
+        action.append('PRE: ')
+        action.append(f'{players[sb].name}[{sb}] b 10. {players[sb].stack} left.')
+        action.append(f'{players[bb].name}[{bb}] b 20. {players[bb].stack} left.')
         cur_player = next_player(bb)
     elif table_stat == TableStat.PRE:
-        action.clear()
+        last_street = action
+        action = []
         table_stat = TableStat.FLOP
+        last_public = []
         public.append(dealer.deal())
         public.append(dealer.deal())
         public.append(dealer.deal())
@@ -270,26 +272,33 @@ def step():
                 player.status = PlayerStat.WAITING
                 player.bet_street = 0
         last_bet = 0
+        action.append('FLOP: ')
         cur_player = next_mover(btn)
     elif table_stat == TableStat.FLOP:
-        action.clear()
+        last_street = action
+        action = []
         table_stat = TableStat.TURN
+        last_public = public.copy()
         public.append(dealer.deal())
         for player in players:
             if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING                
                 player.bet_street = 0
         last_bet = 0
+        action.append('TURN: ')
         cur_player = next_mover(btn)
     elif table_stat == TableStat.TURN:
-        action.clear()
+        last_street = action
+        action = []
         table_stat = TableStat.RIVER
+        last_public = public.copy()
         public.append(dealer.deal())
         for player in players:
             if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING
                 player.bet_street = 0
         last_bet = 0
+        action.append('RIVER: ')
         cur_player = next_mover(btn)
     elif table_stat == TableStat.RIVER:
         showdown()
@@ -308,7 +317,10 @@ def next_mover(i):
     while 1:
         i = (i + 1) % 6
         if players[i] is not None and players[i].status is PlayerStat.WAITING:
-            return i
+            if players[i].stack == 0:
+                players[i].check()
+            else:
+                return i
         if i == j:
             return i
 
@@ -316,7 +328,6 @@ def next_mover(i):
 @app.post('/a')
 def reg_act(move: Move):
     global cur_player, action, table_stat, pot
-    action.append(f'{players[move.seat].name}[{move.seat}] ' + move.move)
     if move.move.startswith('b'):
         players[move.seat].bet(eval(move.move.split()[-1]) - players[move.seat].bet_street)
         print(f'Player {move.seat} bet {move.move.split()[-1]}')
@@ -347,7 +358,7 @@ def reg_act(move: Move):
             step()
             return
 
-    
+    action.append(f'{players[move.seat].name}[{move.seat}] {move.move}. {players[move.seat].stack} left.')
     cur_player = next_mover(move.seat)
     if cur_player == move.seat:
         step()
@@ -358,18 +369,21 @@ def deal_card():
 
 @app.get("/s")
 def table_info(seat: int):
+    global table_stat, public, pot, actionLine, last_street, seats, btn, cur_player, players, last_result, last_winners, last_public
     return {
         'tablestat': table_stat,
         'public': [translate(card) for card in public],
         'pot': pot,
         'actionLine': action,
+        "last_street": last_street,
         'seats': seats,
         'btn': btn,
         'actPlayer': cur_player,
         'stack': players[seat].stack,
         'hand':[translate(card) for card in players[seat].hand],
         "last_result": last_result,
-        "last_winners": last_winners
+        "last_winners": last_winners,
+        "last_public": [translate(card) for card in last_public]
     }
 
 @app.post('/l')
