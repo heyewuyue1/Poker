@@ -9,7 +9,20 @@ from pydantic import BaseModel
 from collections import Counter
 from itertools import combinations
 
+# TODO:
+# 看后手
+# 每条街结束停顿5秒
+# id换成名字,数字换成ATJQK
+
 pot = 0
+last_bet = 0
+last_result = {}
+last_winners = []
+
+trans = ["","","2","3","4","5","6","7","8","9","T","J","Q","K","A"]
+
+def translate(card):
+    return "".join([card[0], trans[card[1]]])
 
 class NoEnoughChipsException(Exception):
     def __init__(self, message):
@@ -39,7 +52,6 @@ class TableStat(Enum):
     FLOP = 2
     TURN = 3
     RIVER = 4
-    SHOWDOWN = 5
 
 class PlayerStat(Enum):
     WAITING = 0
@@ -74,18 +86,31 @@ class Dealer:
         print('river: ' + self.public)
 
 class Player:
-    def __init__(self):
+    def __init__(self, name):
+        self.name = name
         self.hand = []
         self.stack = 2000
         self.status = PlayerStat.FOLDED
-    
+        self.bet_street = 0
+    #现为输入添加
     def bet(self, chips):
-        global pot
+        global pot, last_bet
         if self.stack < chips:
             raise NoEnoughChipsException(f'bet {chips} but only have {self.stack}')
         else:
             self.stack -= chips
             pot += chips
+            self.bet_street += chips
+            last_bet = self.bet_street
+        self.status = PlayerStat.MOVED
+
+    def fold(self):
+        self.status = PlayerStat.FOLDED
+        # self.hand.clear()
+    
+    def check(self):
+        self.status = PlayerStat.MOVED
+
     def win(self, chips):
         self.stack += chips
     
@@ -109,27 +134,30 @@ def is_straight_flush(cards):
 
 def hand_rank(cards):
     value_count = Counter([int(card[1]) for card in cards])
+    sorted_values = sorted(value_count.keys(), reverse=True)  # Sort values in descending order
+    
     max_count = max(value_count.values())
     
     if max_count == 4:
-        return 7, max(value_count, key=value_count.get)  # Four of a Kind
+        return 7, [max(value_count, key=value_count.get)], sorted_values  # Four of a Kind
     elif max_count == 3 and len(value_count) == 2:
-        return 6, max(value_count, key=value_count.get), min(value_count, key=value_count.get)  # Full House
+        return 6, [max(value_count, key=value_count.get), min(value_count, key=value_count.get)], sorted_values  # Full House
     elif is_flush(cards):
         if is_straight(cards):
-            return 8, max(int(card[1]) for card in cards)  # Straight Flush
+            return 8, [max(int(card[1]) for card in cards)], sorted_values  # Straight Flush
         else:
-            return 5, max(int(card[1]) for card in cards)  # Flush
+            return 5, [max(int(card[1]) for card in cards)], sorted_values  # Flush
     elif is_straight(cards):
-        return 4, max(int(card[1]) for card in cards)  # Straight
+        return 4, [max(int(card[1]) for card in cards)], sorted_values  # Straight
     elif max_count == 3:
-        return 3, max(value_count, key=value_count.get)  # Three of a Kind
+        return 3, [max(value_count, key=value_count.get)], sorted_values  # Three of a Kind
     elif max_count == 2 and len(value_count) == 3:
-        return 2, max(value_count, key=value_count.get), min(value_count, key=value_count.get)  # Two Pair
+        pairs = [key for key, value in value_count.items() if value == 2]
+        return 2, pairs, sorted_values  # Two Pair
     elif max_count == 2:
-        return 1, max(value_count, key=value_count.get)  # One Pair
+        return 1, [max(value_count, key=value_count.get)], sorted_values  # One Pair
     else:
-        return 0, max(int(card[1]) for card in cards)  # High Card
+        return 0, sorted_values[:5], sorted_values  # High Card
 
 def compare_hands(hand1, hand2):
     rank1, *args1 = hand_rank(hand1)
@@ -150,7 +178,6 @@ def compare_hands(hand1, hand2):
 def find_best_hand(player_hand, public_cards):
     all_cards = player_hand + public_cards
     best_hand = None
-    max_rank = -1
     
     for combo in combinations(all_cards, 5):
         if best_hand == None:
@@ -161,6 +188,7 @@ def find_best_hand(player_hand, public_cards):
     return best_hand
 
 def compare_hands_for_players(hands):
+    global last_result, last_winners
     winner = []
     for k in hands:
         if winner == []:
@@ -171,6 +199,8 @@ def compare_hands_for_players(hands):
                 winner.append(k)
             elif compare_hands(hands[k], hands[winner[0]]) == 0:
                 winner.append(k)
+    last_result = hands
+    last_winners = winner
     return winner
 
 seed = int(time.time())
@@ -185,7 +215,6 @@ btn = 0
 seats = [0, 0, 0, 0, 0, 0]
 cur_player = 0
 seat_loc = [None, None, None, None, None, None]
-last_bet = 0
 
 app = FastAPI()
 dealer = Dealer()
@@ -208,26 +237,27 @@ def clear():
         if player is not None:
             player.status = PlayerStat.FOLDED
             player.hand.clear()
+            player.bet_street = 0
+            if player.stack == 0:
+                player.stack = 2000
     pot = 0
     dealer.shuffle()
 
 def step():
-    global table_stat, cur_player, action
+    global table_stat, cur_player, action, last_bet
     sb = next_player(btn)
     bb = next_player(sb)
     if table_stat == TableStat.END:
+        players[sb].bet(10)
+        players[bb].bet(20)
         table_stat = TableStat.PRE
         for player in players:
             if player is not None:
                 player.hand.append(dealer.deal())
                 player.hand.append(dealer.deal())
                 player.status = PlayerStat.WAITING
-        players[sb].bet(10)
-        players[sb].status = PlayerStat.MOVED
-        action.append(f'{sb} b 10')
-        action.append(f'{bb} b 20')
-        players[bb].bet(20)
-        players[bb].status = PlayerStat.MOVED
+        action.append(f'{players[sb].name}[{sb}] ' + 'b 10')
+        action.append(f'{players[bb].name}[{bb}] ' + 'b 20')
         cur_player = next_player(bb)
     elif table_stat == TableStat.PRE:
         action.clear()
@@ -235,25 +265,36 @@ def step():
         public.append(dealer.deal())
         public.append(dealer.deal())
         public.append(dealer.deal())
-        cur_player = next_mover(sb)
+        for player in players:
+            if player is not None and player.status == PlayerStat.MOVED:
+                player.status = PlayerStat.WAITING
+                player.bet_street = 0
+        last_bet = 0
+        cur_player = next_mover(btn)
     elif table_stat == TableStat.FLOP:
         action.clear()
         table_stat = TableStat.TURN
         public.append(dealer.deal())
-        cur_player = next_mover(sb)
+        for player in players:
+            if player is not None and player.status == PlayerStat.MOVED:
+                player.status = PlayerStat.WAITING                
+                player.bet_street = 0
+        last_bet = 0
+        cur_player = next_mover(btn)
     elif table_stat == TableStat.TURN:
         action.clear()
         table_stat = TableStat.RIVER
         public.append(dealer.deal())
-        cur_player = next_mover(sb)
+        for player in players:
+            if player is not None and player.status == PlayerStat.MOVED:
+                player.status = PlayerStat.WAITING
+                player.bet_street = 0
+        last_bet = 0
+        cur_player = next_mover(btn)
     elif table_stat == TableStat.RIVER:
-        action.clear()
-        table_stat = TableStat.SHOWDOWN
-        cur_player = next_mover(sb)
-    elif table_stat == TableStat.SHOWDOWN:
         showdown()
-        table_stat = TableStat.END
         clear()
+        table_stat = TableStat.END
         step()
 
 def next_player(i):
@@ -271,36 +312,42 @@ def next_mover(i):
         if i == j:
             return i
 
+
 @app.post('/a')
 def reg_act(move: Move):
-    global cur_player, action, table_stat
-    action.append(f'{seat_loc[move.seat]} ' + move.move)
+    global cur_player, action, table_stat, pot
+    action.append(f'{players[move.seat].name}[{move.seat}] ' + move.move)
     if move.move.startswith('b'):
-        players[move.seat].bet(eval(move.move.split()[-1]))
+        players[move.seat].bet(eval(move.move.split()[-1]) - players[move.seat].bet_street)
+        print(f'Player {move.seat} bet {move.move.split()[-1]}')
         for player in players:
-            if player is not None:
+            if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING
+        players[move.seat].status = PlayerStat.MOVED
     elif move.move.startswith('c'):
-        if last_bet != 0:
-            try:
-                players[move.seat].bet(last_bet)
-            except:
-                players[move.seat].bet(players[move.seat].stack)
+        if last_bet - players[move.seat].bet_street == 0:
+            players[move.seat].check()
+            print(f'Player {move.seat} check')
+        else: 
+            players[move.seat].bet(last_bet - players[move.seat].bet_street)
+            print(f'Player {move.seat} call {players[move.seat].bet_street}')
     elif move.move.startswith('f'):
-        players[move.seat].status = PlayerStat.FOLDED
+        players[move.seat].fold()
+        print(f'Player {move.seat} fold')
         cnt = 0
-        for player in players:
-            if player is not None:
-                if player.status is not PlayerStat.FOLDED:
-                    cnt += 1
+        j = 0
+        for i in range(6):
+            if players[i] is not None and players[i].status is not PlayerStat.FOLDED:
+                cnt += 1
+                j = i
         if cnt == 1:
-            players[move.seat].win(pot)
+            players[j].win(pot)
             table_stat = TableStat.END
             clear()
             step()
             return
 
-    players[move.seat].status = PlayerStat.MOVED
+    
     cur_player = next_mover(move.seat)
     if cur_player == move.seat:
         step()
@@ -313,14 +360,16 @@ def deal_card():
 def table_info(seat: int):
     return {
         'tablestat': table_stat,
-        'public': public,
+        'public': [translate(card) for card in public],
         'pot': pot,
         'actionLine': action,
         'seats': seats,
         'btn': btn,
         'actPlayer': cur_player,
         'stack': players[seat].stack,
-        'hand': players[seat].hand
+        'hand':[translate(card) for card in players[seat].hand],
+        "last_result": last_result,
+        "last_winners": last_winners
     }
 
 @app.post('/l')
@@ -328,7 +377,7 @@ def login(name: User):
     for i in range(6):
         if seats[i] == 0:
             seats[i] = 1
-            players[i] = Player()
+            players[i] = Player(name.name)
             cnt = 0
             for player in players:
                 if player is not None:
@@ -343,4 +392,4 @@ def quit(name: User):
     players.remove(name.name)
 
 if __name__ == '__main__':
-    uvicorn.run(app, port=10532)
+    uvicorn.run("main:app", port=10532, log_level='warning')
