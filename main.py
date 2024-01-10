@@ -1,4 +1,8 @@
+from tkinter import N
+from turtle import pu
+from winsound import PlaySound
 from fastapi import FastAPI
+from matplotlib.pyplot import plasma
 import uvicorn
 from enum import IntEnum, Enum
 import uvicorn
@@ -8,6 +12,13 @@ import random
 from pydantic import BaseModel
 from collections import Counter
 from itertools import combinations
+
+# TODO
+# 边池
+# gracefully quit，每次开始时判断人数是否够2
+# 完善结算，显示牌型
+# 显示还有谁在，目前正在等谁
+# xxx to call
 
 pot = 0
 last_bet = 0
@@ -41,7 +52,7 @@ class Point(IntEnum):
     Queen = 12
     King = 13
 
-class TableStat(Enum):
+class TableStat(IntEnum):
     END = 0
     PRE = 1
     FLOP = 2
@@ -81,34 +92,65 @@ class Dealer:
         print('river: ' + self.public)
 
 class Player:
-    def __init__(self, name):
+    def __init__(self, name, seat):
         self.name = name
         self.hand = []
         self.stack = 2000
         self.status = PlayerStat.FOLDED
         self.bet_street = 0
+        self.seat = seat
     #现为输入添加
     def bet(self, chips):
         global pot, last_bet
-        if self.stack < chips:
-            raise NoEnoughChipsException(f'bet {chips} but only have {self.stack}')
+        if self.stack <= chips:
+            pot += self.stack
+            self.bet_street += self.stack
+            last_bet = self.bet_street
+            self.stack = 0
+            action.append(f'{self.name}[{self.seat}] bet all in ({self.bet_street}). {self.stack} left.')
+            print(f'{self.name}[{self.seat}] bet all in ({self.bet_street}). {self.stack} left.')
+            self.status = PlayerStat.MOVED
         else:
             self.stack -= chips
             pot += chips
             self.bet_street += chips
             last_bet = self.bet_street
-        self.status = PlayerStat.MOVED
+            action.append(f'{self.name}[{self.seat}] bet {self.bet_street}. {self.stack} left.')
+            print(f'{self.name}[{self.seat}] bet {self.bet_street}. {self.stack} left.')
+            self.status = PlayerStat.MOVED
+
+    def call(self, chips):
+        global pot, last_bet
+        if self.stack <= chips:
+            pot += self.stack
+            self.bet_street += self.stack
+            self.stack = 0
+            action.append(f'{self.name}[{self.seat}] call all in ({self.bet_street}). {self.stack} left.')
+            print(f'{self.name}[{self.seat}] call all in ({self.bet_street}). {self.stack} left.')
+            self.status = PlayerStat.MOVED
+
+        else:
+            self.stack -= chips
+            pot += chips
+            self.bet_street += chips
+            action.append(f'{self.name}[{self.seat}] call {self.bet_street}. {self.stack} left.')
+            print(f'{self.name}[{self.seat}] call {self.bet_street}. {self.stack} left.')
+            self.status = PlayerStat.MOVED
+
 
     def fold(self):
         self.status = PlayerStat.FOLDED
-        # self.hand.clear()
+        action.append(f'{self.name}[{self.seat}] fold. {self.stack} left.')
+        print(f'{self.name}[{self.seat}] fold. {self.stack} left.')
     
     def check(self):
         self.status = PlayerStat.MOVED
+        action.append(f'{self.name}[{self.seat}] check. {self.stack} left.')
+        print(f'{self.name}[{self.seat}] check. {self.stack} left.')
 
     def win(self, chips):
         self.stack += chips
-    
+
 class User(BaseModel):
     name: str
 
@@ -183,7 +225,7 @@ def find_best_hand(player_hand, public_cards):
     return best_hand
 
 def compare_hands_for_players(hands):
-    global last_result, last_winners, players
+    global players, last_winners
     winner = []
     for k in hands:
         if winner == []:
@@ -194,9 +236,6 @@ def compare_hands_for_players(hands):
                 winner.append(k)
             elif compare_hands(hands[k], hands[winner[0]]) == 0:
                 winner.append(k)
-    last_result = {}
-    for k in hands:
-        last_result[k] = [translate(card) for card in sorted(list(hands[k]), key=lambda x: x[1].value, reverse=True)]
     last_winners = [players[k].name for k in winner]
     return winner
 
@@ -211,7 +250,6 @@ last_street = []
 last_public = []
 table_stat = TableStat.END
 btn = 0
-seats = [0, 0, 0, 0, 0, 0]
 cur_player = 0
 seat_loc = [None, None, None, None, None, None]
 
@@ -219,16 +257,19 @@ app = FastAPI()
 dealer = Dealer()
 
 def showdown():
+    global last_result, last_winners
     cmp_dict = {}
+    winner = []
     for i in range(6):
-        if players[i] is not None and players[i].status is PlayerStat.MOVED:
+        if players[i] is not None and players[i].status is not PlayerStat.FOLDED:
             cmp_dict[i] = find_best_hand(players[i].hand, public)
+            last_result[players[i].name] = [translate(card) for card in players[i].hand]
     winner = compare_hands_for_players(cmp_dict)
     for win in winner:
         players[win].win(pot // len(winner))
 
 def clear():
-    global public, pot, action, btn
+    global public, pot, action, btn, last_pot
     public = []
     action = []
     last_street.clear()
@@ -248,6 +289,7 @@ def step():
     sb = next_player(btn)
     bb = next_player(sb)
     if table_stat == TableStat.END:
+        action.append('PRE: ')
         players[sb].bet(10)
         players[bb].bet(20)
         table_stat = TableStat.PRE
@@ -256,52 +298,68 @@ def step():
                 player.hand.append(dealer.deal())
                 player.hand.append(dealer.deal())
                 player.status = PlayerStat.WAITING
-        action.append('PRE: ')
-        action.append(f'{players[sb].name}[{sb}] b 10. {players[sb].stack} left.')
-        action.append(f'{players[bb].name}[{bb}] b 20. {players[bb].stack} left.')
+        dealer.deal()
+        public.append(dealer.deal())
+        public.append(dealer.deal())
+        public.append(dealer.deal())
+        dealer.deal()
+        public.append(dealer.deal())
+        dealer.deal()
+        public.append(dealer.deal())
         cur_player = next_player(bb)
     elif table_stat == TableStat.PRE:
         last_street = action
         action = []
         table_stat = TableStat.FLOP
         last_public = []
-        public.append(dealer.deal())
-        public.append(dealer.deal())
-        public.append(dealer.deal())
         for player in players:
             if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING
                 player.bet_street = 0
         last_bet = 0
         action.append('FLOP: ')
-        cur_player = next_mover(btn)
+        n_player = next_mover(btn)
+        nn_player = next_mover(n_player)
+        if n_player == nn_player:
+            step()
+        else:
+            cur_player = n_player
     elif table_stat == TableStat.FLOP:
         last_street = action
         action = []
         table_stat = TableStat.TURN
-        last_public = public.copy()
-        public.append(dealer.deal())
+        last_public = public[:3].copy()
         for player in players:
             if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING                
                 player.bet_street = 0
         last_bet = 0
         action.append('TURN: ')
-        cur_player = next_mover(btn)
+        n_player = next_mover(btn)
+        nn_player = next_mover(n_player)
+        if n_player == nn_player:
+            step()
+        else:
+            cur_player = n_player
     elif table_stat == TableStat.TURN:
         last_street = action
         action = []
         table_stat = TableStat.RIVER
-        last_public = public.copy()
-        public.append(dealer.deal())
+        last_public = public[:4].copy()
         for player in players:
             if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING
                 player.bet_street = 0
         last_bet = 0
         action.append('RIVER: ')
-        cur_player = next_mover(btn)
+        n_player = next_mover(btn)
+        nn_player = next_mover(n_player)
+        if n_player == nn_player:
+            step()
+        else:
+            cur_player = n_player
     elif table_stat == TableStat.RIVER:
+        last_public = public.copy()
         showdown()
         clear()
         table_stat = TableStat.END
@@ -317,21 +375,19 @@ def next_mover(i):
     j = i
     while 1:
         i = (i + 1) % 6
+        if i == j:
+            return i
         if players[i] is not None and players[i].status is PlayerStat.WAITING:
             if players[i].stack == 0:
                 players[i].check()
             else:
                 return i
-        if i == j:
-            return i
-
 
 @app.post('/a')
 def reg_act(move: Move):
     global cur_player, action, table_stat, pot
     if move.move.startswith('b'):
         players[move.seat].bet(eval(move.move.split()[-1]) - players[move.seat].bet_street)
-        print(f'Player {move.seat} bet {move.move.split()[-1]}')
         for player in players:
             if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING
@@ -339,16 +395,10 @@ def reg_act(move: Move):
     elif move.move.startswith('c'):
         if last_bet - players[move.seat].bet_street == 0:
             players[move.seat].check()
-            print(f'Player {move.seat} check')
-        else: 
-            if players[move.seat].stack < last_bet - players[move.seat].bet_street:
-                players[move.seat].bet(player[move.seat].stack)
-            else:
-                players[move.seat].bet(last_bet - players[move.seat].bet_street)
-            print(f'Player {move.seat} call {players[move.seat].bet_street}')
+        else:
+            players[move.seat].call(last_bet - players[move.seat].bet_street)
     elif move.move.startswith('f'):
         players[move.seat].fold()
-        print(f'Player {move.seat} fold')
         cnt = 0
         j = 0
         for i in range(6):
@@ -362,7 +412,6 @@ def reg_act(move: Move):
             step()
             return
 
-    action.append(f'{players[move.seat].name}[{move.seat}] {move.move}. {players[move.seat].stack} left.')
     cur_player = next_mover(move.seat)
     if cur_player == move.seat:
         step()
@@ -373,29 +422,27 @@ def deal_card():
 
 @app.get("/s")
 def table_info(seat: int):
-    global table_stat, public, pot, actionLine, last_street, seats, btn, cur_player, players, last_result, last_winners, last_public
+    global table_stat, public, pot, action, last_street, btn, cur_player, players, last_result, last_winners, last_public
     return {
         'tablestat': table_stat,
         'public': [translate(card) for card in public],
         'pot': pot,
         'actionLine': action,
         "last_street": last_street,
-        'seats': seats,
         'btn': btn,
         'actPlayer': cur_player,
         'stack': players[seat].stack,
         'hand':[translate(card) for card in players[seat].hand],
         "last_result": last_result,
         "last_winners": last_winners,
-        "last_public": [translate(card) for card in last_public]
+        "last_public": [translate(card) for card in last_public],
     }
 
 @app.post('/l')
 def login(name: User):
     for i in range(6):
-        if seats[i] == 0:
-            seats[i] = 1
-            players[i] = Player(name.name)
+        if players[i] == None:
+            players[i] = Player(name.name, i)
             cnt = 0
             for player in players:
                 if player is not None:
