@@ -6,7 +6,7 @@ import os
 from pprint import pprint
 
 # url = "	http://localhost:10532"
-url = "http://7a91edc1.r20.cpolar.top"
+url = "http://6fb15974.r17.cpolar.top"
 name = input('>>> ')
 print(name)
 seat = eval(requests.post(url + '/l', json={"name": name}).text)
@@ -43,6 +43,7 @@ def log_stat(status):
             print(f'Public Cards: {" ".join([str(a) for a in show_public])}')
             print(f'Action Line:')
             print('\n'.join(status['actionLine']))
+            print(f'{status["actPlayerName"]}[{status["actPlayer"]}] ...')
             print(f'Your Stack: {status["stack"]}')
             print(f'Your Position: {seat}')
             print(f'Button: {status["btn"]}')
@@ -63,6 +64,7 @@ def log_stat(status):
         print(f'Public Cards: {" ".join([str(a) for a in show_public])}')
         print(f'Action Line:')
         print('\n'.join(status['actionLine']))
+        print(f'{status["actPlayerName"]}[{status["actPlayer"]}] ...')
         print(f'Your Stack: {status["stack"]}')
         print(f'Your Position: {seat}')
         print(f'Button: {status["btn"]}')

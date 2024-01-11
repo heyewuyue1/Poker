@@ -1,6 +1,3 @@
-from tkinter import N
-from turtle import pu
-from winsound import PlaySound
 from fastapi import FastAPI
 from matplotlib.pyplot import plasma
 import uvicorn
@@ -17,7 +14,7 @@ from itertools import combinations
 # 边池
 # gracefully quit，每次开始时判断人数是否够2
 # 完善结算，显示牌型
-# 显示还有谁在，目前正在等谁
+# 显示还有谁在  
 # xxx to call
 
 pot = 0
@@ -260,6 +257,7 @@ def showdown():
     global last_result, last_winners
     cmp_dict = {}
     winner = []
+    last_result = {}
     for i in range(6):
         if players[i] is not None and players[i].status is not PlayerStat.FOLDED:
             cmp_dict[i] = find_best_hand(players[i].hand, public)
@@ -431,6 +429,7 @@ def table_info(seat: int):
         "last_street": last_street,
         'btn': btn,
         'actPlayer': cur_player,
+        'actPlayerName':players[cur_player].name,
         'stack': players[seat].stack,
         'hand':[translate(card) for card in players[seat].hand],
         "last_result": last_result,
