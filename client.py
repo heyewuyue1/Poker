@@ -6,7 +6,7 @@ import os
 from pprint import pprint
 
 # url = "	http://localhost:10532"
-url = "http://6fb15974.r17.cpolar.top"
+url = "http://d88b815.r11.cpolar.top"
 name = input('>>> ')
 print(name)
 seat = eval(requests.post(url + '/l', json={"name": name}).text)

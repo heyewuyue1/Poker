@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-from matplotlib.pyplot import plasma
 import uvicorn
 from enum import IntEnum, Enum
 import uvicorn
