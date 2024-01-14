@@ -24,7 +24,18 @@ last_winners = []
 trans = ["","","2","3","4","5","6","7","8","9","T","J","Q","K","A"]
 
 def translate(card):
-    return "".join([card[0], trans[card[1]]])
+    color_pre = ''
+    color_end = ''
+    if card[0] == '♥':
+        color_pre = '\033[31m'
+        color_end = '\33[0m'
+    if card[0] == '♣':
+        color_pre = '\033[32m'
+        color_end = '\33[0m'
+    if card[0] == '♦':
+        color_pre = '\033[34m'
+        color_end = '\33[0m'
+    return color_pre + card[0] + trans[card[1]] + color_end
 
 class NoEnoughChipsException(Exception):
     def __init__(self, message):
@@ -103,16 +114,16 @@ class Player:
             self.bet_street += self.stack
             last_bet = self.bet_street
             self.stack = 0
-            action.append(f'{self.name}[{self.seat}] bet all in ({self.bet_street}). {self.stack} left.')
-            print(f'{self.name}[{self.seat}] bet all in ({self.bet_street}). {self.stack} left.')
+            action.append(f'{self.name}[{self.seat}] bet all in ({self.bet_street}).')
+            print(f'{self.name}[{self.seat}] bet all in ({self.bet_street}).')
             self.status = PlayerStat.MOVED
         else:
             self.stack -= chips
             pot += chips
             self.bet_street += chips
             last_bet = self.bet_street
-            action.append(f'{self.name}[{self.seat}] bet {self.bet_street}. {self.stack} left.')
-            print(f'{self.name}[{self.seat}] bet {self.bet_street}. {self.stack} left.')
+            action.append(f'{self.name}[{self.seat}] bet {self.bet_street}.')
+            print(f'{self.name}[{self.seat}] bet {self.bet_street}.')
             self.status = PlayerStat.MOVED
 
     def call(self, chips):
@@ -121,28 +132,28 @@ class Player:
             pot += self.stack
             self.bet_street += self.stack
             self.stack = 0
-            action.append(f'{self.name}[{self.seat}] call all in ({self.bet_street}). {self.stack} left.')
-            print(f'{self.name}[{self.seat}] call all in ({self.bet_street}). {self.stack} left.')
+            action.append(f'{self.name}[{self.seat}] call all in ({self.bet_street}).')
+            print(f'{self.name}[{self.seat}] call all in ({self.bet_street}).')
             self.status = PlayerStat.MOVED
 
         else:
             self.stack -= chips
             pot += chips
             self.bet_street += chips
-            action.append(f'{self.name}[{self.seat}] call {self.bet_street}. {self.stack} left.')
-            print(f'{self.name}[{self.seat}] call {self.bet_street}. {self.stack} left.')
+            action.append(f'{self.name}[{self.seat}] call {self.bet_street}.')
+            print(f'{self.name}[{self.seat}] call {self.bet_street}.')
             self.status = PlayerStat.MOVED
 
 
     def fold(self):
         self.status = PlayerStat.FOLDED
-        action.append(f'{self.name}[{self.seat}] fold. {self.stack} left.')
-        print(f'{self.name}[{self.seat}] fold. {self.stack} left.')
+        action.append(f'{self.name}[{self.seat}] fold.')
+        print(f'{self.name}[{self.seat}] fold.')
     
     def check(self):
         self.status = PlayerStat.MOVED
-        action.append(f'{self.name}[{self.seat}] check. {self.stack} left.')
-        print(f'{self.name}[{self.seat}] check. {self.stack} left.')
+        action.append(f'{self.name}[{self.seat}] check.')
+        print(f'{self.name}[{self.seat}] check.')
 
     def win(self, chips):
         self.stack += chips
@@ -156,7 +167,7 @@ class Move(BaseModel):
 
 def is_straight(cards):
     values = sorted([int(card[1]) for card in cards], reverse=True)
-    return all(values[i] - 1 == values[i + 1] for i in range(len(values) - 1))
+    return all(values[i] - 1 == values[i + 1] for i in range(len(values) - 1)) or values == [14, 5, 4, 3, 2]
 
 def is_flush(cards):
     suits = set(card[0] for card in cards)
@@ -286,6 +297,12 @@ def step():
     sb = next_player(btn)
     bb = next_player(sb)
     if table_stat == TableStat.END:
+        cnt = 0
+        for player in players:
+            if player is not None:
+                cnt += 1
+        if cnt < 2:
+            return
         action.append('PRE: ')
         players[sb].bet(10)
         players[bb].bet(20)
@@ -394,7 +411,7 @@ def reg_act(move: Move):
             players[move.seat].check()
         else:
             players[move.seat].call(last_bet - players[move.seat].bet_street)
-    elif move.move.startswith('f'):
+    elif move.move.startswith('f') or move.move.startswith('q'):
         players[move.seat].fold()
         cnt = 0
         j = 0
@@ -402,6 +419,8 @@ def reg_act(move: Move):
             if players[i] is not None and players[i].status is not PlayerStat.FOLDED:
                 cnt += 1
                 j = i
+        if move.move.startswith('q'):
+            players[move.seat] = None
         if cnt == 1:
             players[j].win(pot)
             table_stat = TableStat.END
@@ -422,13 +441,18 @@ def table_info(seat: int):
     global table_stat, public, pot, action, last_street, btn, cur_player, players, last_result, last_winners, last_public
     return {
         'tablestat': table_stat,
+        'players': [{'name': player.name if player is not None else '', 
+                     'left': player.stack if player is not None else '', 
+                     'seat': player.seat if player is not None else '', 
+                     'status': player.status if player is not None else ''
+                     } for player in players],
         'public': [translate(card) for card in public],
         'pot': pot,
         'actionLine': action,
         "last_street": last_street,
         'btn': btn,
         'actPlayer': cur_player,
-        'actPlayerName':players[cur_player].name,
+        'actPlayerName':players[cur_player].name if players[cur_player] is not None else "",
         'stack': players[seat].stack,
         'hand':[translate(card) for card in players[seat].hand],
         "last_result": last_result,
@@ -449,10 +473,6 @@ def login(name: User):
                 step()
             return i
     return -1
-
-@app.post('/q')
-def quit(name: User):
-    players.remove(name.name)
 
 if __name__ == '__main__':
     uvicorn.run("main:app", port=10532, log_level='warning')

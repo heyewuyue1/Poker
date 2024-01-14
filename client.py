@@ -1,12 +1,8 @@
-import pprint
-from traceback import StackSummary
 import requests
 import time
 import os
-from pprint import pprint
 
-# url = "	http://localhost:10532"
-url = "http://d88b815.r11.cpolar.top"
+url = "http://9360597.r18.cpolar.top"
 name = input('>>> ')
 print(name)
 seat = eval(requests.post(url + '/l', json={"name": name}).text)
@@ -38,6 +34,17 @@ def log_stat(status):
         time.sleep(10)
     elif status["last_street"] != last_street:
         if status["last_street"] == []:
+            for player in status['players']:
+                if player['name'] != '':
+                    stat = ''
+                    if player['status'] == 0:
+                        stat = 'WAITING'
+                    if player['status'] == 1:
+                        stat = 'MOVED'
+                    if player['status'] == 2:
+                        stat = 'FOLDED'
+                    print(f'{player["name"]}[{player["seat"]}] {stat}. {player["left"]} left.')
+            print('\n\n')
             print(f'Your Hand: {" ".join(status["hand"])}')
             print(f'Current Pot: {status["pot"]}')
             print(f'Public Cards: {" ".join([str(a) for a in show_public])}')
@@ -49,6 +56,17 @@ def log_stat(status):
             print(f'Button: {status["btn"]}')
         else:
             last_street = status["last_street"]
+            for player in status['players']:
+                if player['name'] != '':
+                    stat = ''
+                    if player['status'] == 0:
+                        stat = 'WAITING'
+                    if player['status'] == 1:
+                        stat = 'MOVED'
+                    if player['status'] == 2:
+                        stat = 'FOLDED'
+                    print(f'{player["name"]}[{player["seat"]}] {stat}. {player["left"]} left.')
+            print('\n\n')
             print(f'Your Hand: {" ".join(status["hand"])}')
             print(f'Current Pot: {status["pot"]}')
             print(f'Public Cards: {" ".join([str(a) for a in last_public])}')
@@ -59,6 +77,17 @@ def log_stat(status):
             print(f'Button: {status["btn"]}')
             time.sleep(3)
     else:
+        for player in status['players']:
+                if player['name'] != '':
+                    stat = ''
+                    if player['status'] == 0:
+                        stat = 'WAITING'
+                    if player['status'] == 1:
+                        stat = 'MOVED'
+                    if player['status'] == 2:
+                        stat = 'FOLDED'
+                    print(f'{player["name"]}[{player["seat"]}] {stat}. {player["left"]} left.')
+        print('\n\n')
         print(f'Your Hand: {" ".join(status["hand"])}')
         print(f'Current Pot: {status["pot"]}')
         print(f'Public Cards: {" ".join([str(a) for a in show_public])}')
@@ -93,9 +122,11 @@ while 1:
             public = status["public"]
             log_stat(status)
             move = input('>>> ')
-            while not move.startswith('c') and not move.startswith('b') and not move.startswith('f'):
+            while not move.startswith('c') and not move.startswith('b') and not move.startswith('f') and not move.startswith('q'):
                 move = input('Wrong Formatt. c for check, b 99 for bet 99, f for fold >>>')
             while move.startswith('b') and len(move.split()) != 2:
                 move = input('Wrong Formatt. c for check, b 99 for bet 99, f for fold >>>')
             res = requests.post(url + '/a', json={'seat': seat, 'move': move}).text
+            if move.startswith('q'):
+                exit()
     time.sleep(1)
