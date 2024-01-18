@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from matplotlib.mlab import window_none
 import uvicorn
 from enum import IntEnum, Enum
 import uvicorn
@@ -8,6 +9,7 @@ import random
 from pydantic import BaseModel
 from collections import Counter
 from itertools import combinations
+import sys
 
 # TODO
 # 边池
@@ -106,12 +108,14 @@ class Player:
         self.status = PlayerStat.FOLDED
         self.bet_street = 0
         self.seat = seat
+        self.bet_hand = 0
     #现为输入添加
     def bet(self, chips):
         global pot, last_bet
         if self.stack <= chips:
             pot += self.stack
             self.bet_street += self.stack
+            self.bet_hand += self.stack
             last_bet = self.bet_street
             self.stack = 0
             action.append(f'{self.name}[{self.seat}] bet all in ({self.bet_street}).')
@@ -121,6 +125,7 @@ class Player:
             self.stack -= chips
             pot += chips
             self.bet_street += chips
+            self.bet_hand += chips
             last_bet = self.bet_street
             action.append(f'{self.name}[{self.seat}] bet {self.bet_street}.')
             print(f'{self.name}[{self.seat}] bet {self.bet_street}.')
@@ -131,6 +136,7 @@ class Player:
         if self.stack <= chips:
             pot += self.stack
             self.bet_street += self.stack
+            self.bet_hand += self.stack
             self.stack = 0
             action.append(f'{self.name}[{self.seat}] call all in ({self.bet_street}).')
             print(f'{self.name}[{self.seat}] call all in ({self.bet_street}).')
@@ -140,6 +146,7 @@ class Player:
             self.stack -= chips
             pot += chips
             self.bet_street += chips
+            self.bet_hand += chips
             action.append(f'{self.name}[{self.seat}] call {self.bet_street}.')
             print(f'{self.name}[{self.seat}] call {self.bet_street}.')
             self.status = PlayerStat.MOVED
@@ -243,7 +250,6 @@ def compare_hands_for_players(hands):
                 winner.append(k)
             elif compare_hands(hands[k], hands[winner[0]]) == 0:
                 winner.append(k)
-    last_winners = [players[k].name for k in winner]
     return winner
 
 seed = int(time.time())
@@ -272,9 +278,32 @@ def showdown():
         if players[i] is not None and players[i].status is not PlayerStat.FOLDED:
             cmp_dict[i] = find_best_hand(players[i].hand, public)
             last_result[players[i].name] = [translate(card) for card in players[i].hand]
-    winner = compare_hands_for_players(cmp_dict)
-    for win in winner:
-        players[win].win(pot // len(winner))
+    flag = True
+    while cmp_dict != {}:
+        winner = compare_hands_for_players(cmp_dict)
+        if flag:
+            last_winners = [players[k].name for k in winner]
+            flag = False
+        print(f'winner of this round {winner}')
+        min_max_win = sys.maxsize
+        mmw_idx = -1
+        for win in winner:
+            if players[win].bet_hand < min_max_win:
+                min_max_win = players[win].bet_hand
+                mmw_idx = win
+        print(f'shipping chips for {mmw_idx}')
+        for player in players:
+            if player is not None:
+                if player.bet_hand < min_max_win:
+                    players[mmw_idx].win(player.bet_hand // len(winner))
+                    print(f'player {player.seat} pay player {mmw_idx} {player.bet_hand // len(winner)}')
+                    player.bet_hand -= player.bet_hand // len(winner)
+                else:
+                    players[mmw_idx].win(min_max_win // len(winner))
+                    print(f'player {player.seat} pay player {mmw_idx} {min_max_win // len(winner)}')
+
+                    player.bet_hand -= min_max_win // len(winner)
+        cmp_dict.pop(mmw_idx)
 
 def clear():
     global public, pot, action, btn, last_pot
@@ -286,6 +315,7 @@ def clear():
         if player is not None:
             player.status = PlayerStat.FOLDED
             player.hand.clear()
+            player.bet_hand = 0
             player.bet_street = 0
             if player.stack == 0:
                 player.stack = 2000

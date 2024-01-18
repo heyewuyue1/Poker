@@ -2,7 +2,7 @@ import requests
 import time
 import os
 
-url = "http://9360597.r18.cpolar.top"
+url = "http://4e26bb9f.r8.cpolar.top"
 name = input('>>> ')
 print(name)
 seat = eval(requests.post(url + '/l', json={"name": name}).text)
