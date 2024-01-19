@@ -2,10 +2,9 @@ import requests
 import time
 import os
 
-url = "http://4e26bb9f.r8.cpolar.top"
-name = input('>>> ')
-print(name)
-seat = eval(requests.post(url + '/l', json={"name": name}).text)
+url = "	http://41520d4.r7.cpolar.top"
+buf = input('健康游戏忠告：请先把各种梯子和加速器关了\nPlease input your name and chips(e.g. hjh 2000)\n>>> ')
+seat = eval(requests.post(url + '/l', json={"name": buf.split()[0], "chips": eval(buf.split()[1])}).text)
 print(f'you sit at {seat}')
 last_result = {}
 last_winners = []

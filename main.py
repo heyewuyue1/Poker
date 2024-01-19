@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-from matplotlib.mlab import window_none
 import uvicorn
 from enum import IntEnum, Enum
 import uvicorn
@@ -12,12 +11,10 @@ from itertools import combinations
 import sys
 
 # TODO
-# 边池
-# gracefully quit，每次开始时判断人数是否够2
+# 超时q
 # 完善结算，显示牌型
-# 显示还有谁在  
 # xxx to call
-
+SEAT_NUM = 10
 pot = 0
 last_bet = 0
 last_result = {}
@@ -38,13 +35,6 @@ def translate(card):
         color_pre = '\033[34m'
         color_end = '\33[0m'
     return color_pre + card[0] + trans[card[1]] + color_end
-
-class NoEnoughChipsException(Exception):
-    def __init__(self, message):
-        self.message = message
-    
-    def __str__(self):
-        return f"No Enough Chips: {self.message}"
 
 class Point(IntEnum):
     Ace = 14
@@ -167,6 +157,7 @@ class Player:
 
 class User(BaseModel):
     name: str
+    chips: int
 
 class Move(BaseModel):
     seat: int
@@ -204,7 +195,7 @@ def hand_rank(cards):
         return 3, [max(value_count, key=value_count.get)], sorted_values  # Three of a Kind
     elif max_count == 2 and len(value_count) == 3:
         pairs = [key for key, value in value_count.items() if value == 2]
-        return 2, pairs, sorted_values  # Two Pair
+        return 2, sorted(pairs, reverse=True), sorted_values  # Two Pair
     elif max_count == 2:
         return 1, [max(value_count, key=value_count.get)], sorted_values  # One Pair
     else:
@@ -257,7 +248,7 @@ r = random.Random(seed)
 colors = ('♠', '♥', '♦', '♣')
 points = (Point.Ace, Point.Two, Point.Three,Point.Four,Point.Five,Point.Six,Point.Seven,Point.Eight,Point.Nine,Point.Ten,Point.Jack,Point.Queen,Point.King)
 public = []
-players = [None, None, None, None, None, None]
+players = [None, None, None, None, None, None, None, None, None, None]
 action = []
 last_street = []
 last_public = []
@@ -274,7 +265,7 @@ def showdown():
     cmp_dict = {}
     winner = []
     last_result = {}
-    for i in range(6):
+    for i in range(SEAT_NUM):
         if players[i] is not None and players[i].status is not PlayerStat.FOLDED:
             cmp_dict[i] = find_best_hand(players[i].hand, public)
             last_result[players[i].name] = [translate(card) for card in players[i].hand]
@@ -411,14 +402,14 @@ def step():
 
 def next_player(i):
     while 1:
-        i = (i + 1) % 6
+        i = (i + 1) % SEAT_NUM
         if players[i] is not None:
             return i
 
 def next_mover(i):
     j = i
     while 1:
-        i = (i + 1) % 6
+        i = (i + 1) % SEAT_NUM
         if i == j:
             return i
         if players[i] is not None and players[i].status is PlayerStat.WAITING:
@@ -445,7 +436,7 @@ def reg_act(move: Move):
         players[move.seat].fold()
         cnt = 0
         j = 0
-        for i in range(6):
+        for i in range(SEAT_NUM):
             if players[i] is not None and players[i].status is not PlayerStat.FOLDED:
                 cnt += 1
                 j = i
@@ -492,9 +483,10 @@ def table_info(seat: int):
 
 @app.post('/l')
 def login(name: User):
-    for i in range(6):
+    for i in range(SEAT_NUM):
         if players[i] == None:
             players[i] = Player(name.name, i)
+            players[i].stack = name.chips
             cnt = 0
             for player in players:
                 if player is not None:
