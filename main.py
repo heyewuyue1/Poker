@@ -3,6 +3,7 @@ import uvicorn
 from enum import IntEnum, Enum
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import time
 import random
 from pydantic import BaseModel
@@ -19,22 +20,26 @@ pot = 0
 last_bet = 0
 last_result = {}
 last_winners = []
+showdown_info = ''
 
 trans = ["","","2","3","4","5","6","7","8","9","T","J","Q","K","A"]
 
+# def translate(card):
+#     color_pre = ''
+#     color_end = ''
+#     if card[0] == '♥':
+#         color_pre = '\033[31m'
+#         color_end = '\33[0m'
+#     if card[0] == '♣':
+#         color_pre = '\033[32m'
+#         color_end = '\33[0m'
+#     if card[0] == '♦':
+#         color_pre = '\033[34m'
+#         color_end = '\33[0m'
+#     return color_pre + card[0] + trans[card[1]] + color_end
+
 def translate(card):
-    color_pre = ''
-    color_end = ''
-    if card[0] == '♥':
-        color_pre = '\033[31m'
-        color_end = '\33[0m'
-    if card[0] == '♣':
-        color_pre = '\033[32m'
-        color_end = '\33[0m'
-    if card[0] == '♦':
-        color_pre = '\033[34m'
-        color_end = '\33[0m'
-    return color_pre + card[0] + trans[card[1]] + color_end
+    return card[0] + trans[card[1]]
 
 class Point(IntEnum):
     Ace = 14
@@ -258,10 +263,18 @@ cur_player = 0
 seat_loc = [None, None, None, None, None, None]
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许访问的源列表
+    allow_credentials=True,  # 允许携带cookie
+    allow_methods=["*"],  # 允许所有方法
+    allow_headers=["*"],  # 允许所有头部
+)
+
 dealer = Dealer()
 
 def showdown():
-    global last_result, last_winners
+    global last_result, last_winners, showdown_info
     cmp_dict = {}
     winner = []
     last_result = {}
@@ -295,6 +308,13 @@ def showdown():
 
                     player.bet_hand -= min_max_win // len(winner)
         cmp_dict.pop(mmw_idx)
+    showdown_info += 'Comparing:\n'
+    for k in last_result:
+            showdown_info += f'{k}: {" ".join(last_result[k])}\n'
+    showdown_info += "Public Cards: " + " ".join([translate(a) for a in last_public]) + '\n'
+    showdown_info += f'Winners: {", ".join([str(a) for a in last_winners])}'
+    time.sleep(10)
+    showdown_info = ''
 
 def clear():
     global public, pot, action, btn, last_pot
@@ -315,6 +335,7 @@ def clear():
 
 def step():
     global table_stat, cur_player, action, last_bet, last_street, last_public
+    time.sleep(3)
     sb = next_player(btn)
     bb = next_player(sb)
     if table_stat == TableStat.END:
@@ -453,13 +474,9 @@ def reg_act(move: Move):
     if cur_player == move.seat:
         step()
 
-@app.get("/d")
-def deal_card():
-    return dealer.deal()
-
 @app.get("/s")
 def table_info(seat: int):
-    global table_stat, public, pot, action, last_street, btn, cur_player, players, last_result, last_winners, last_public
+    global table_stat, public, pot, action, last_street, btn, cur_player, players, last_result, last_winners, last_public, showdown_info
     return {
         'tablestat': table_stat,
         'players': [{'name': player.name if player is not None else '', 
@@ -479,6 +496,7 @@ def table_info(seat: int):
         "last_result": last_result,
         "last_winners": last_winners,
         "last_public": [translate(card) for card in last_public],
+        "showdown_info": showdown_info
     }
 
 @app.post('/l')

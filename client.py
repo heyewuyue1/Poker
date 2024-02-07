@@ -2,7 +2,7 @@ import requests
 import time
 import os
 
-url = "http://23aaeeaf.r7.cpolar.top"
+url = "http://2119cbfa.r17.cpolar.top"
 buf = input('健康游戏忠告：请先把各种梯子和加速器关了\nPlease input your name and chips(e.g. hjh 2000)\n>>> ')
 seat = eval(requests.post(url + '/l', json={"name": buf.split()[0], "chips": eval(buf.split()[1])}).text)
 print(f'you sit at {seat}')
@@ -96,7 +96,6 @@ def log_stat(status):
         print(f'Your Stack: {status["stack"]}')
         print(f'Your Position: {seat}')
         print(f'Button: {status["btn"]}')
-    
 
 while 1:
     for i in range(3):
