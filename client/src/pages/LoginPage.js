@@ -6,9 +6,8 @@ import { Input, Button } from '@nextui-org/react';
 
 const Login = () => {
     const navigate = useNavigate(); // 创建history对象
-
-    // 状态管理URL、用户名和筹码量
-    const [url, setUrl] = useState('');
+    const url = 'https://39808a7d.r19.cpolar.top'
+    // 用户名和筹码量
     const [username, setUsername] = useState('');
     const [chips, setChips] = useState('');
 
@@ -34,16 +33,6 @@ const Login = () => {
         <div style={{ maxWidth: '300px', margin: '0 auto', padding: '20px' }}>
             <h2>登录</h2>
             <form onSubmit={handleSubmit}>
-                <div style={{ marginBottom: '10px' }}>
-                    <label htmlFor="url">URL</label>
-                    <Input
-                        type="text"
-                        id="url"
-                        value={url}
-                        onChange={handleInputChange(setUrl)}
-                        style={{ display: 'block', width: '100%', marginTop: '5px' }}
-                    />
-                </div>
                 <div style={{ marginBottom: '10px' }}>
                     <label htmlFor="username">用户名</label>
                     <Input

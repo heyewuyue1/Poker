@@ -3,21 +3,21 @@ import React from 'react';
 const Card = ({ vs }) => {
 
     if (vs.includes('♠')) {
-        var suit = 's'
+        var suit = 'S'
     } else if (vs.includes('♥')) {
-        suit = 'h'
+        suit = 'H'
     } else if (vs.includes('♣')) {
-        suit = 'c'
+        suit = 'C'
     } else if (vs.includes('♦')) {
-        suit = 'd'
+        suit = 'D'
     }
     if (vs.length > 2) {
-        var value = vs[6]
+        var value = vs[6].toUpperCase()
     }
-    else value = vs[1]
+    else value = vs[1].toUpperCase()
 
     // 构建图片路径，假设所有图片都放在public/assets/cards/目录下
-    const imagePath = `cards/${value}${suit}.jpg`;
+    const imagePath = `cards/${value}${suit}.svg`;
 
     return vs === '' ? (
     <div>

@@ -18,25 +18,9 @@ import sys
 SEAT_NUM = 10
 pot = 0
 last_bet = 0
-last_result = {}
-last_winners = []
 showdown_info = ''
-
+end_of_street = False
 trans = ["","","2","3","4","5","6","7","8","9","T","J","Q","K","A"]
-
-# def translate(card):
-#     color_pre = ''
-#     color_end = ''
-#     if card[0] == '♥':
-#         color_pre = '\033[31m'
-#         color_end = '\33[0m'
-#     if card[0] == '♣':
-#         color_pre = '\033[32m'
-#         color_end = '\33[0m'
-#     if card[0] == '♦':
-#         color_pre = '\033[34m'
-#         color_end = '\33[0m'
-#     return color_pre + card[0] + trans[card[1]] + color_end
 
 def translate(card):
     return card[0] + trans[card[1]]
@@ -235,7 +219,7 @@ def find_best_hand(player_hand, public_cards):
     return best_hand
 
 def compare_hands_for_players(hands):
-    global players, last_winners
+    global players
     winner = []
     for k in hands:
         if winner == []:
@@ -255,8 +239,6 @@ points = (Point.Ace, Point.Two, Point.Three,Point.Four,Point.Five,Point.Six,Poin
 public = []
 players = [None, None, None, None, None, None, None, None, None, None]
 action = []
-last_street = []
-last_public = []
 table_stat = TableStat.END
 btn = 0
 cur_player = 0
@@ -274,19 +256,20 @@ app.add_middleware(
 dealer = Dealer()
 
 def showdown():
-    global last_result, last_winners, showdown_info
+    global showdown_info
     cmp_dict = {}
     winner = []
-    last_result = {}
+    result = {}
+    winners = []
     for i in range(SEAT_NUM):
         if players[i] is not None and players[i].status is not PlayerStat.FOLDED:
             cmp_dict[i] = find_best_hand(players[i].hand, public)
-            last_result[players[i].name] = [translate(card) for card in players[i].hand]
+            result[players[i].name] = [translate(card) for card in players[i].hand]
     flag = True
     while cmp_dict != {}:
         winner = compare_hands_for_players(cmp_dict)
         if flag:
-            last_winners = [players[k].name for k in winner]
+            winners = [players[k].name for k in winner]
             flag = False
         print(f'winner of this round {winner}')
         min_max_win = sys.maxsize
@@ -309,18 +292,17 @@ def showdown():
                     player.bet_hand -= min_max_win // len(winner)
         cmp_dict.pop(mmw_idx)
     showdown_info += 'Comparing:\n'
-    for k in last_result:
-            showdown_info += f'{k}: {" ".join(last_result[k])}\n'
-    showdown_info += "Public Cards: " + " ".join([translate(a) for a in last_public]) + '\n'
-    showdown_info += f'Winners: {", ".join([str(a) for a in last_winners])}'
+    for k in result:
+            showdown_info += f'{k}: {" ".join(result[k])}\n'
+    showdown_info += "Public Cards: " + " ".join([translate(a) for a in public]) + '\n'
+    showdown_info += f'Winners: {", ".join([str(a) for a in winners])}'
     time.sleep(10)
     showdown_info = ''
 
 def clear():
-    global public, pot, action, btn, last_pot
+    global public, pot, action, btn
     public = []
     action = []
-    last_street.clear()
     btn = next_player(btn)
     for player in players:
         if player is not None:
@@ -334,8 +316,11 @@ def clear():
     dealer.shuffle()
 
 def step():
-    global table_stat, cur_player, action, last_bet, last_street, last_public
-    time.sleep(3)
+    global table_stat, cur_player, action, last_bet, end_of_street, players
+    if action != []:
+        action.pop()
+    if table_stat != TableStat.END:
+        time.sleep(3) 
     sb = next_player(btn)
     bb = next_player(sb)
     if table_stat == TableStat.END:
@@ -349,11 +334,13 @@ def step():
         players[sb].bet(10)
         players[bb].bet(20)
         table_stat = TableStat.PRE
+        print('New game start.')
         for player in players:
             if player is not None:
                 player.hand.append(dealer.deal())
                 player.hand.append(dealer.deal())
                 player.status = PlayerStat.WAITING
+                print(f'{player.name}[{player.seat}]: {player.hand}')
         dealer.deal()
         public.append(dealer.deal())
         public.append(dealer.deal())
@@ -363,11 +350,12 @@ def step():
         dealer.deal()
         public.append(dealer.deal())
         cur_player = next_player(bb)
+        print(f'Public: {public}')
+        action.append(f'{players[cur_player].name}[{cur_player}] ...')
     elif table_stat == TableStat.PRE:
-        last_street = action
         action = []
         table_stat = TableStat.FLOP
-        last_public = []
+        print('-----FLOP-----')
         for player in players:
             if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING
@@ -380,11 +368,11 @@ def step():
             step()
         else:
             cur_player = n_player
+        action.append(f'{players[cur_player].name}[{cur_player}] ...')
     elif table_stat == TableStat.FLOP:
-        last_street = action
         action = []
         table_stat = TableStat.TURN
-        last_public = public[:3].copy()
+        print('-----TURN-----')
         for player in players:
             if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING                
@@ -397,11 +385,11 @@ def step():
             step()
         else:
             cur_player = n_player
+        action.append(f'{players[cur_player].name}[{cur_player}] ...')
     elif table_stat == TableStat.TURN:
-        last_street = action
         action = []
         table_stat = TableStat.RIVER
-        last_public = public[:4].copy()
+        print('-----RIVER-----')
         for player in players:
             if player is not None and player.status == PlayerStat.MOVED:
                 player.status = PlayerStat.WAITING
@@ -414,11 +402,12 @@ def step():
             step()
         else:
             cur_player = n_player
+        action.append(f'{players[cur_player].name}[{cur_player}] ...')
     elif table_stat == TableStat.RIVER:
-        last_public = public.copy()
         showdown()
         clear()
         table_stat = TableStat.END
+        print('-----END-----')
         step()
 
 def next_player(i):
@@ -441,7 +430,9 @@ def next_mover(i):
 
 @app.post('/a')
 def reg_act(move: Move):
-    global cur_player, action, table_stat, pot
+    global cur_player, action, table_stat, pot, players
+    if action != []:
+        action.pop()
     if move.move.startswith('b'):
         players[move.seat].bet(eval(move.move.split()[-1]) - players[move.seat].bet_street)
         for player in players:
@@ -454,6 +445,10 @@ def reg_act(move: Move):
         else:
             players[move.seat].call(last_bet - players[move.seat].bet_street)
     elif move.move.startswith('f') or move.move.startswith('q'):
+        if move.move.startswith('q') and table_stat == TableStat.END:
+            print(f'{players[move.seat].name}[{move.seat}] quit the game.')
+            players[move.seat] = None
+            return
         players[move.seat].fold()
         cnt = 0
         j = 0
@@ -462,6 +457,7 @@ def reg_act(move: Move):
                 cnt += 1
                 j = i
         if move.move.startswith('q'):
+            print(f'{players[move.seat].name}[{move.seat}] quit the game.')
             players[move.seat] = None
         if cnt == 1:
             players[j].win(pot)
@@ -471,12 +467,13 @@ def reg_act(move: Move):
             return
 
     cur_player = next_mover(move.seat)
+    action.append(f'{players[cur_player].name}[{cur_player}] ...')
     if cur_player == move.seat:
         step()
 
 @app.get("/s")
 def table_info(seat: int):
-    global table_stat, public, pot, action, last_street, btn, cur_player, players, last_result, last_winners, last_public, showdown_info
+    global table_stat, public, pot, action, btn, cur_player, players, showdown_info
     return {
         'tablestat': table_stat,
         'players': [{'name': player.name if player is not None else '', 
@@ -487,22 +484,23 @@ def table_info(seat: int):
         'public': [translate(card) for card in public],
         'pot': pot,
         'actionLine': action,
-        "last_street": last_street,
+        # 'actionLine': action if end_of_street else action.append(f'{players[cur_player].name if players[cur_player] is not None else ""}[{cur_player}] ...'),
         'btn': btn,
         'actPlayer': cur_player,
-        'actPlayerName':players[cur_player].name if players[cur_player] is not None else "",
-        'stack': players[seat].stack,
-        'hand':[translate(card) for card in players[seat].hand],
-        "last_result": last_result,
-        "last_winners": last_winners,
-        "last_public": [translate(card) for card in last_public],
+        'actPlayerName': players[cur_player].name if players[cur_player] is not None else "",
+        'stack': players[seat].stack if players[seat] is not None else 0,
+        'hand':[translate(card) for card in players[seat].hand] if players[seat] is not None else [],
         "showdown_info": showdown_info
     }
 
 @app.post('/l')
 def login(name: User):
     for i in range(SEAT_NUM):
+        if players[i] is not None and players[i].name == name.name:
+            return i
+    for i in range(SEAT_NUM):
         if players[i] == None:
+            print(f'{name.name}[{i}] logged in with {name.chips} chips.')
             players[i] = Player(name.name, i)
             players[i].stack = name.chips
             cnt = 0

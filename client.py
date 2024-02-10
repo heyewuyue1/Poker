@@ -12,6 +12,20 @@ last_street = []
 last_public = []
 public = []
 
+# def translate(card):
+#     color_pre = ''
+#     color_end = ''
+#     if card[0] == '♥':
+#         color_pre = '\033[31m'
+#         color_end = '\33[0m'
+#     if card[0] == '♣':
+#         color_pre = '\033[32m'
+#         color_end = '\33[0m'
+#     if card[0] == '♦':
+#         color_pre = '\033[34m'
+#         color_end = '\33[0m'
+#     return color_pre + card[0] + trans[card[1]] + color_end
+
 def log_stat(status):
     global last_result, last_winners, last_street, public, last_public
     show_public = []
